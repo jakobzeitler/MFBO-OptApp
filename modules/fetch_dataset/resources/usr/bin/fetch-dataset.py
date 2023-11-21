@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 
+import torch
+import numpy as np
 import argparse
 import json
-
-import numpy as np
+from Model_maker import BuildModel, Syngas_fermentation_simulator
+from utils import generate_initial_data, tensor_to_dict, set_rng_seed
+from Multi_fedility_maker import Multi_fidelity_model
+from MHSapi.MHSapi import MHSapiClient
 import pandas as pd
 
 if __name__ == '__main__':
     # parse command-line arguments
     parser = argparse.ArgumentParser(description='Download an OpenML dataset')
-    parser.add_argument('--token', help='token', required=True, default='01ba5d69504449ce8de4faca341e8187a29c938bb435aad29b1b8487941ccebf')
+    parser.add_argument('--token', help='token', required=True, default='01ba5d69504449ce8de4faca341e')
     parser.add_argument('--base_url', help='base url', required=True, default= 'https://mhs.ngrok.app/' )
     parser.add_argument('--project_id', help='project id', required=True, default=-1)
     parser.add_argument('--opt_run_id', help='opt run id', required=True, default=-1)
@@ -19,7 +23,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # 1. Initialise API client
-    from MHSapi.MHSapi import MHSapiClient
     client = MHSapiClient(token=args.token, base_url=args.base_url)
     projects = client.experiments_list()
     project = [p for p in projects if int(p.id) == int(args.project_id)][0]
@@ -33,50 +36,58 @@ if __name__ == '__main__':
     # 3. Save data
     dataset.to_csv(args.data, sep='\t')
 
-
-    # 4. Do BO
-    import torch
-    from botorch.models import SingleTaskGP
-    from botorch.fit import fit_gpytorch_mll
-    from botorch.utils import standardize
-    from gpytorch.mlls import ExactMarginalLogLikelihood
-
-    from botorch.models.transforms.input import Normalize
-    from botorch.models.transforms.outcome import Standardize
-
-    inputs = [p for p in parameters if p.outcome == False and p.timestamp == False]
+    inputs = [p for p in parameters if p.outcome == False and p.timestamp == False] #and p.fidelity == False]
     outcome = [p for p in parameters if p.outcome == True][0]
+    #fidelity = [p for p in parameters if p.outcome == False and p.timestamp == False and p.fidelity == True][0]
+
+    #fidelity = dataset[[fidelity.parameter_text]]
     X = dataset[[i.parameter_text for i in inputs]]
+    #X = pd.concat([X,fidelity])
     Y = dataset[[outcome.parameter_text]]
-    train_X = torch.tensor(X.to_numpy(dtype=np.float64))
-    train_Y = torch.tensor(Y.to_numpy(dtype=np.float64))
-    #train_Y = standardize(train_Y)
-    print(train_X.shape)
-    print(train_X)
-    print(train_Y.shape)
-    print(train_Y)
+    train_x = torch.tensor(X.to_numpy(dtype=np.float64))
+    train_obj = torch.tensor(Y.to_numpy(dtype=np.float64))
+    set_rng_seed(1245)
 
-    gp = SingleTaskGP(train_X, train_Y, input_transform=Normalize(d=train_X.shape[-1]), outcome_transform=Standardize(m=train_Y.shape[-1]))
-    mll = ExactMarginalLogLikelihood(gp.likelihood, gp)
-    fit_gpytorch_mll(mll)
+    tkwargs = {
+        "dtype": torch.double,
+        "device": torch.device("cuda" if torch.cuda.is_available() else "cpu"), }
 
-    from botorch.acquisition import UpperConfidenceBound
-    UCB = UpperConfidenceBound(gp, beta=0.1)
+    # TODO: pull from MHS
+    bounds = torch.tensor([[1, 101325, 0.1, 0.1, 0.1, 1, 1E-3, 1], [50.0, 506625, 1, 1, 1, 200, 1E-2, 1]], **tkwargs)
+    # target_fidelities = {7: 1.0}
+    gp_model = BuildModel()
+    problem = Syngas_fermentation_simulator(gp_model, negate=False)
 
-    from botorch.optim import optimize_acqf
+    # train_x, train_obj = generate_initial_data(problem, n=5)
+    fidelities = torch.tensor([0.0, 1.0], **tkwargs)
 
-    upper_bounds = torch.tensor([p.upper_bound for p in inputs])
-    lower_bounds = torch.tensor([p.lower_bound for p in inputs])
-    bounds = torch.stack([lower_bounds, upper_bounds])
-    candidate, acq_value = optimize_acqf(
-        UCB, bounds=bounds, q=1, num_restarts=5, raw_samples=20,
-    )
-    candidate  # tensor([0.4887, 0.5063])
-    print(list(candidate[0]))
+    fidelity_list = tensor_to_dict(fidelities, problem.dim - 1)
+    row_indices = np.array([2, 3, 4])
+    fixed_cost = 0
 
+    mf_model = Multi_fidelity_model(problem, fidelity_list, row_indices, fixed_cost, bounds, train_x, train_obj)
+
+    data, cost = mf_model.run()
+    data.to_csv(f'{project.id}_Dataset.csv')
+    model = mf_model.get_model()
+    final_rec = mf_model.get_recommendation(model)
+    # print(data)
+    # print('----')
+    df_shape = data.shape
+
+    # Access the number of rows and columns
+    num_rows = df_shape[0]
+    num_columns = df_shape[1]
+    print(f"Input shape: {len(inputs)} and Columns: {num_columns}")
     new_sample = {}
-    for i, c in enumerate(list(candidate[0])):
-        new_sample[inputs[i].parameter_text] = c.numpy()
+    for col in range(num_columns - 1):
+        for row in range(num_rows):
+            new_sample[inputs[col].parameter_text] = data.iloc[row, col]
+
+    # new_sample = {}
+    # for i, c in data.iterrows():
+    #     print([i, c])
+    #     new_sample[inputs[i].parameter_text] = c
 
     new_sample[outcome.parameter_text] = np.nan
     new_sample["opt_run_id"] = args.opt_run_id
