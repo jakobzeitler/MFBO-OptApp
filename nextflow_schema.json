@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "$id": "https://raw.githubusercontent.com/nextflow-io/hyperopt/master/nextflow_schema.json",
+  "title": "hyperopt pipeline parameters",
+  "description": "Pipeline for efficient experimental scheduling with Nextflow.",
+  "type": "object",
+  "definitions": {
+      "pipeline_options": {
+          "title": "Pipeline options",
+          "type": "object",
+          "description": "",
+          "default": "",
+          "fa_icon": "fas fa-terminal",
+          "properties": {
+              "fetch_dataset": {
+                  "type": "boolean",
+                  "description": "Fetch the data from Matterhorn Studio API.",
+                  "default": true,
+                  "fa_icon": "fas fa-download"
+              },
+              "project_id": {
+                  "type": "string",
+                  "description": "ID of Project on MHS",
+              },
+              "datadir": {
+                  "type": "string",
+                  "description": "Directory that contains any input datasets and pre-trained models",
+                  "default": "data",
+                  "fa_icon": "fas fa-folder-open"
+              },
+              "outdir": {
+                  "type": "string",
+                  "description": "Directory to publish output data",
+                  "default": "results",
+                  "fa_icon": "fas fa-folder-open"
+              }
+          }
+      }
+  },
+  "allOf": [
+      {
+          "$ref": "#/definitions/pipeline_options"
+      }
+  ]
+}
