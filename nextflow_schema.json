@@ -20,7 +20,7 @@
               },
               "project_id": {
                   "type": "string",
-                  "description": "ID of Project on MHS",
+                  "description": "ID of Project on MHS"
               },
               "datadir": {
                   "type": "string",
