@@ -1,22 +1,10 @@
 {
-  "schema": {
-    "type": "object",
-    "properties": {
-      "control6": {
-        "type": "array",
-        "items": {
-          "type": "string"
-        }
-      }
-    }
+  "type": "array",
+  "title": "Shopping list",
+  "description": "Add items to your shopping list",
+  "items": {
+    "type": "string"
   },
-  "uischema": {
-    "type": "VerticalLayout",
-    "elements": [
-      {
-        "type": "Control",
-        "scope": "#/properties/control6"
-      }
-    ]
-  }
+  "minItems": 1,
+  "maxItems": 5
 }
