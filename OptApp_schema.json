@@ -2,18 +2,10 @@
   "schema": {
     "type": "object",
     "properties": {
-      "fidelities": {
+      "control6": {
         "type": "array",
         "items": {
-          "type": "object",
-          "properties": {
-            "fidelity_identifier": {
-              "type": "string"
-            },
-            "fidelity_cost_relative": {
-              "type": "string"
-            }
-          }
+          "type": "string"
         }
       }
     }
@@ -23,7 +15,7 @@
     "elements": [
       {
         "type": "Control",
-        "scope": "#/properties/fidelities"
+        "scope": "#/properties/control6"
       }
     ]
   }
